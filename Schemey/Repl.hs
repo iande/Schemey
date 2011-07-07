@@ -13,8 +13,11 @@ import Control.Monad
 import Control.Monad.Error
 import Text.ParserCombinators.Parsec
 
-runOne :: String -> IO ()
-runOne expr = baseEnv >>= flip evalAndPrint expr
+runOne :: [String] -> IO ()
+runOne args = do
+  env <- baseEnv >>= flip bindVars [("args", LList $ map LString $ drop 1 args)]
+  (runIOThrows $ liftM show $ eval env (LList [LAtom "load", LString (args !! 0)]))
+    >>= hPutStrLn stderr
 
 runRepl :: IO ()
 runRepl = baseEnv >>= until_ (== "quit") (readPrompt "L> ") . evalAndPrint
@@ -38,7 +41,3 @@ until_ cond prompt act = do
     then return ()
     else act result >> until_ cond prompt act
 
-readExpr :: String -> ThrowsError LispVal
-readExpr input = case parse parseExpr "lisp" input of
-  Left err  -> throwError $ Parser err
-  Right val -> return val

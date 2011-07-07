@@ -13,6 +13,7 @@ module Schemey.Env
     runIOThrows
   ) where
 
+import IO
 import Data.IORef
 import Control.Monad
 import Control.Monad.Error
@@ -31,6 +32,8 @@ data LispVal = LAtom String
                  body :: [LispVal],
                  closure :: LEnv
                }
+             | IOFunc ([LispVal] -> IOThrowsError LispVal)
+             | Port Handle
 
 data LispError = NumArgs Integer [LispVal]
                | TypeMismatch String LispVal
@@ -102,6 +105,8 @@ unwordsList :: [LispVal] -> String
 unwordsList = unwords . map showVal
 
 showVal :: LispVal -> String
+showVal (IOFunc _) = "<IO primitive>"
+showVal (Port _) = "<IO port>"
 showVal (LString str) = "\"" ++ str ++ "\""
 showVal (LAtom name) = name
 showVal (LNumber n) = show n

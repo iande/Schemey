@@ -5,7 +5,10 @@ module Schemey.Primitives
     baseEnv
   ) where
 
+import IO
 import Schemey.Env
+import Schemey.Tao (apply)
+import Schemey.Parse (readExpr, load)
 import Control.Monad
 import Control.Monad.Error
 import Data.IORef
@@ -159,10 +162,47 @@ primitives = [("+", numericBinop (+)),
               ("eq?", eqv),
               ("eqv?", eqv),
               ("equal?", equal)]
+              
+ioPrimitives :: [(String, [LispVal] -> IOThrowsError LispVal)]
+ioPrimitives = [("apply", applyProc),
+                ("open-input-file", mkPort ReadMode),
+                ("open-output-file", mkPort WriteMode),
+                ("close-input-port", closePort),
+                ("close-output-port", closePort),
+                ("read", readProc),
+                ("write", writeProc),
+                ("read-contents", readContents),
+                ("read-all", readAll)]
+
+applyProc :: [LispVal] -> IOThrowsError LispVal
+applyProc [func, LList args] = apply func args
+applyProc (func : args)     = apply func args
+
+mkPort :: IOMode -> [LispVal] -> IOThrowsError LispVal
+mkPort mode [LString fname] = liftM Port $ liftIO $ openFile fname mode
+
+closePort :: [LispVal] -> IOThrowsError LispVal
+closePort [Port p] = liftIO $ hClose p >> (return $ LBool True)
+closePort _        = return $ LBool False
+
+readProc :: [LispVal] -> IOThrowsError LispVal
+readProc []       = readProc [Port stdin]
+readProc [Port p] = (liftIO $ hGetLine p) >>= liftThrows . readExpr
+
+writeProc :: [LispVal] -> IOThrowsError LispVal
+writeProc [obj]         = writeProc [obj, Port stdout]
+writeProc [obj, Port p] = liftIO $ hPrint p obj >> (return $ LBool True)
+
+readContents :: [LispVal] -> IOThrowsError LispVal
+readContents [LString fname] = liftM LString $ liftIO $ readFile fname
+
+readAll :: [LispVal] -> IOThrowsError LispVal
+readAll [LString fname] = liftM LList $ load fname
 
 nullEnv :: IO LEnv
 nullEnv = newIORef []
 
 baseEnv :: IO LEnv
-baseEnv = nullEnv >>= (flip bindVars $ map mkPrimitiveFunc primitives)
-  where mkPrimitiveFunc (name, func) = (name, PrimitiveFunc func)
+baseEnv = nullEnv >>= (flip bindVars $ map (mkFunc IOFunc) ioPrimitives
+                                    ++ map (mkFunc PrimitiveFunc) primitives)
+    where mkFunc constructor (var, func) = (var, constructor func)

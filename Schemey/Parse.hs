@@ -1,10 +1,14 @@
 module Schemey.Parse
   (
-    parseExpr
+    parseExpr,
+    readExpr,
+    readExprList,
+    load
   ) where
 
 import Schemey.Env
 import Control.Monad
+import Control.Monad.Error
 import Text.ParserCombinators.Parsec hiding (spaces)
 
 symbol :: Parser Char
@@ -58,3 +62,14 @@ parseExpr = parseAtom
           x <- try parseList <|> parseDottedList
           char ')'
           return x
+
+readOrThrow :: Parser a -> String -> ThrowsError a
+readOrThrow parser input = case parse parser "lisp" input of
+  Left err  -> throwError $ Parser err
+  Right val -> return val
+
+readExpr = readOrThrow parseExpr
+readExprList = readOrThrow (endBy parseExpr spaces)
+
+load :: String -> IOThrowsError [LispVal]
+load fname = (liftIO $ readFile fname) >>= liftThrows . readExprList

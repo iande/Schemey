@@ -1,9 +1,11 @@
 module Schemey.Tao
   (
-    eval
+    eval,
+    apply
   ) where
 
 import Schemey.Env
+import Schemey.Parse (load)
 import Control.Monad
 import Control.Monad.Error
 import IO
@@ -14,6 +16,8 @@ eval _ v@(LNumber _) = return v
 eval _ v@(LBool _) = return v
 eval env (LAtom nm) = getVar env nm
 eval _ (LList [LAtom "quote", v]) = return v
+eval env (LList [LAtom "load", LString fname]) =
+  load fname >>= liftM last . mapM (eval env)
 eval env (LList [LAtom "if", p, q, e]) = do
   result <- eval env p
   case result of
@@ -40,6 +44,7 @@ eval env (LList (func : args)) = do
 eval _ badForm = throwError $ BadSpecialForm "Unrecognized special form" badForm
 
 apply :: LispVal -> [LispVal] -> IOThrowsError LispVal
+apply (IOFunc f) args = f args
 apply (PrimitiveFunc f) args = liftThrows $ f args
 apply (Func ps vargs body env) args =
   if num ps /= num args && vargs == Nothing
